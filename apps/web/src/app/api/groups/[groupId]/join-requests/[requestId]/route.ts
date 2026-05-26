@@ -84,7 +84,14 @@ export async function POST(
     }
 
     const notifyResult = await notifyJoinDecisionUser(requestId);
-    return NextResponse.json({ ok: true, notifyResult });
+    return NextResponse.json({
+      ok: true,
+      notifyResult,
+      notificationWarning:
+        notifyResult.sentMessages > 0
+          ? null
+          : notifyResult.errors.join(" | ") || "Notification was not delivered",
+    });
   } catch (error) {
     return NextResponse.json(
       {

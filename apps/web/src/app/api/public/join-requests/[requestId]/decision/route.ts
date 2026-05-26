@@ -71,13 +71,31 @@ export async function GET(
       }
     }
 
-    await notifyJoinDecisionUser(requestId);
+    const notifyResult = await notifyJoinDecisionUser(requestId);
 
     if (action === "approved") {
-      return plain(200, "Request approved. The user was added to the group and notified.");
+      if (notifyResult.sentMessages > 0) {
+        return plain(200, "Request approved. The user was added to the group and notified.");
+      }
+
+      return plain(
+        200,
+        `Request approved. The user was added to the group, but notification delivery failed: ${
+          notifyResult.errors.join(" | ") || "unknown reason"
+        }`
+      );
     }
 
-    return plain(200, "Request rejected. The user was notified.");
+    if (notifyResult.sentMessages > 0) {
+      return plain(200, "Request rejected. The user was notified.");
+    }
+
+    return plain(
+      200,
+      `Request rejected, but notification delivery failed: ${
+        notifyResult.errors.join(" | ") || "unknown reason"
+      }`
+    );
   } catch (error) {
     return plain(
       500,

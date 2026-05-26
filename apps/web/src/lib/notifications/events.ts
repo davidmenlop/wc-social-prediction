@@ -118,7 +118,7 @@ export async function notifyJoinDecisionUser(
 
   const request = await loadJoinRequest(requestId);
   const group = await loadGroup(request.group_id);
-  const requester = await loadProfile(request.requested_by);
+  const requester = await loadProfileOptional(request.requested_by);
 
   if (request.status !== "approved" && request.status !== "rejected") {
     result.skippedMessages += 1;
@@ -128,8 +128,26 @@ export async function notifyJoinDecisionUser(
     return result;
   }
 
-  if (!requester.phone || !requester.notification_enabled) {
+  const candidatePhones = uniquePhones([
+    request.requested_phone,
+    requester?.phone ?? null,
+  ]);
+
+  if (candidatePhones.length === 0) {
     result.skippedMessages += 1;
+    result.errors.push(
+      `Join request ${request.id}: no phone available for requester ${request.requested_by}`
+    );
+    return result;
+  }
+
+  // For transactional decisions (approved/rejected), always attempt delivery if a phone exists.
+  // requested_phone is prioritized because it is the number captured at request time.
+  if (requester && !requester.notification_enabled && !request.requested_phone) {
+    result.skippedMessages += 1;
+    result.errors.push(
+      `Join request ${request.id}: user notifications disabled and no requested_phone fallback`
+    );
     return result;
   }
 
@@ -139,17 +157,21 @@ export async function notifyJoinDecisionUser(
     nextStepLink: buildApprovedNextStepLink(group.id, request.status),
   });
 
-  const sendResult = await sendWhatsAppMessage(requester.phone, body);
-  if (sendResult.sent) {
-    result.sentMessages += 1;
-  } else {
-    result.skippedMessages += 1;
+  for (const phone of candidatePhones) {
+    const sendResult = await sendWhatsAppMessage(phone, body);
+    if (sendResult.sent) {
+      result.sentMessages += 1;
+      return result;
+    }
+
     result.errors.push(
-      `Join request ${request.id}, user ${request.requested_by}: ${
+      `Join request ${request.id}, user ${request.requested_by}, phone ${phone}: ${
         sendResult.error ?? "send failed"
       }`
     );
   }
+
+  result.skippedMessages += 1;
 
   return result;
 }
@@ -339,6 +361,20 @@ async function loadProfile(profileId: string): Promise<ProfileRow> {
   return data as ProfileRow;
 }
 
+async function loadProfileOptional(profileId: string): Promise<ProfileRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("id, display_name, phone, notification_enabled")
+    .eq("id", profileId)
+    .maybeSingle();
+
+  if (error) {
+    return null;
+  }
+
+  return (data as ProfileRow | null) ?? null;
+}
+
 async function loadGroupAdminProfiles(group: GroupRow): Promise<ProfileRow[]> {
   const { data: members, error } = await supabaseAdmin
     .from("group_members")
@@ -381,4 +417,21 @@ function uniqueProfilesById(profiles: ProfileRow[]): ProfileRow[] {
     map.set(profile.id, profile);
   }
   return Array.from(map.values());
+}
+
+function uniquePhones(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const phones: string[] = [];
+
+  for (const value of values) {
+    const phone = value?.trim();
+    if (!phone || seen.has(phone)) {
+      continue;
+    }
+
+    seen.add(phone);
+    phones.push(phone);
+  }
+
+  return phones;
 }
