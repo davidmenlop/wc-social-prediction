@@ -63,5 +63,14 @@ function formatWhatsappRecipient(input: string): string {
   if (trimmed.startsWith("+")) {
     return `whatsapp:${trimmed}`;
   }
-  return `whatsapp:+${trimmed}`;
+
+  const digitsOnly = trimmed.replace(/\D/g, "");
+  const defaultCountryCode = (getOptionalServerEnv("WHATSAPP_DEFAULT_COUNTRY_CODE") || "")
+    .replace(/\D/g, "");
+
+  if (defaultCountryCode) {
+    return `whatsapp:+${defaultCountryCode}${digitsOnly}`;
+  }
+
+  return `whatsapp:+${digitsOnly}`;
 }

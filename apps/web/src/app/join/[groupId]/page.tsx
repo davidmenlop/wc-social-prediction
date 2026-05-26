@@ -95,6 +95,12 @@ export default function JoinGroupPage({
       return;
     }
 
+    if (group.privacy === "approval_required" && !requestedPhone.trim()) {
+      setStatus("error");
+      setMessage("WhatsApp is required for private groups. Use format like +573001112233.");
+      return;
+    }
+
     setStatus("loading");
     setMessage("Preparing your access...");
 
@@ -187,6 +193,11 @@ export default function JoinGroupPage({
               placeholder="Example: +573001112233"
               className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-emerald-500 transition focus:ring"
             />
+            {isApprovalRequired && (
+              <span className="mt-1 block text-xs text-slate-500">
+                Required for approval notifications.
+              </span>
+            )}
           </label>
         </div>
 

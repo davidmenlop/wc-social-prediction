@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { notifyJoinRequestAdmins } from "@/lib/notifications/events";
+import { getOptionalServerEnv } from "@/lib/env.server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 type JoinBody = {
@@ -38,7 +39,15 @@ export async function POST(
 
     const body = (await request.json().catch(() => ({}))) as JoinBody;
     const requestedName = body.requestedName?.trim() || null;
-    const requestedPhone = normalizePhone(body.requestedPhone || "");
+    const defaultCountryCode = getOptionalServerEnv("WHATSAPP_DEFAULT_COUNTRY_CODE");
+    const phoneResult = normalizePhone(body.requestedPhone || "", defaultCountryCode);
+    if (phoneResult.error) {
+      return NextResponse.json(
+        { ok: false, error: phoneResult.error },
+        { status: 400 }
+      );
+    }
+    const requestedPhone = phoneResult.value;
 
     const { data: group, error: groupError } = await supabaseAdmin
       .from("groups")
@@ -55,6 +64,17 @@ export async function POST(
       return NextResponse.json(
         { ok: false, code: "registration_closed", error: "Group registration is closed" },
         { status: 409 }
+      );
+    }
+
+    if (typedGroup.privacy === "approval_required" && !requestedPhone) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "WhatsApp number is required for approval-required groups. Use international format like +573001112233.",
+        },
+        { status: 400 }
       );
     }
 
@@ -208,19 +228,49 @@ async function resolveUserIdFromAuthorization(request: Request): Promise<string 
   return data.user.id;
 }
 
-function normalizePhone(raw: string): string | null {
+function normalizePhone(
+  raw: string,
+  defaultCountryCode?: string
+): { value: string | null; error?: string } {
   const trimmed = raw.trim();
   if (!trimmed) {
-    return null;
+    return { value: null };
   }
 
   const keepPlus = trimmed.startsWith("+");
   const digitsOnly = trimmed.replace(/\D/g, "");
   if (!digitsOnly) {
-    return null;
+    return { value: null, error: "Invalid WhatsApp number." };
   }
 
-  return keepPlus ? `+${digitsOnly}` : digitsOnly;
+  let normalized = "";
+  if (keepPlus) {
+    normalized = `+${digitsOnly}`;
+  } else {
+    const ccDigits = (defaultCountryCode || "").replace(/\D/g, "");
+    if (ccDigits) {
+      normalized = `+${ccDigits}${digitsOnly}`;
+    } else if (digitsOnly.length >= 11 && digitsOnly.length <= 15) {
+      normalized = `+${digitsOnly}`;
+    } else {
+      return {
+        value: null,
+        error:
+          "WhatsApp number must include country code (e.g. +573001112233) or configure WHATSAPP_DEFAULT_COUNTRY_CODE.",
+      };
+    }
+  }
+
+  const normalizedDigits = normalized.replace(/\D/g, "");
+  if (normalizedDigits.length < 8 || normalizedDigits.length > 15) {
+    return {
+      value: null,
+      error:
+        "WhatsApp number format is invalid. Use international format like +573001112233.",
+    };
+  }
+
+  return { value: normalized };
 }
 
 function isRegistrationClosed(registrationDeadline: string | null): boolean {

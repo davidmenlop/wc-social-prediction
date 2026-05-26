@@ -59,8 +59,16 @@ export async function notifyWinners(limit = 20): Promise<NotifyWinnersResult> {
     return profiles;
   };
 
+  const groupNameCache = new Map<string, string>();
+
   for (const match of (matches as MatchRow[]) ?? []) {
     result.processedMatches += 1;
+
+    const groupName = await resolveGroupName(match.group_id, groupNameCache);
+    if (!groupName) {
+      result.errors.push(`Match ${match.id}: failed loading group ${match.group_id}`);
+      continue;
+    }
 
     const { data: predictions, error: predictionsError } = await supabaseAdmin
       .from("predictions")
@@ -89,6 +97,7 @@ export async function notifyWinners(limit = 20): Promise<NotifyWinnersResult> {
       }
 
       const message = buildWinnerMessage({
+        groupName,
         homeTeam: match.home_team,
         awayTeam: match.away_team,
         homeGoals: match.home_goals,
@@ -123,4 +132,27 @@ export async function notifyWinners(limit = 20): Promise<NotifyWinnersResult> {
   }
 
   return result;
+}
+
+async function resolveGroupName(
+  groupId: string,
+  cache: Map<string, string>
+): Promise<string | null> {
+  const cached = cache.get(groupId);
+  if (cached) {
+    return cached;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("groups")
+    .select("name")
+    .eq("id", groupId)
+    .maybeSingle();
+
+  if (error || !data?.name) {
+    return null;
+  }
+
+  cache.set(groupId, data.name);
+  return data.name;
 }

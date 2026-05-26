@@ -1,6 +1,7 @@
 import "server-only";
 
 type WinnerMessageParams = {
+  groupName: string;
   homeTeam: string;
   awayTeam: string;
   homeGoals: number;
@@ -30,6 +31,7 @@ type PredictionReminderMessageParams = {
 
 export function buildWinnerMessage(params: WinnerMessageParams): string {
   return [
+    `Grupo: ${params.groupName}.`,
     `Ganaste en tu pronostico: ${params.homeTeam} ${params.homeGoals}-${params.awayGoals} ${params.awayTeam}.`,
     `Puntos del partido: ${params.points}.`,
     "Revisa el ranking actualizado en la app.",
