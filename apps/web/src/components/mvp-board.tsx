@@ -48,8 +48,25 @@ function toIsoOrNull(raw: string) {
   return parsed.toISOString();
 }
 
+function normalizePhone(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const keepPlus = trimmed.startsWith("+");
+  const digitsOnly = trimmed.replace(/\D/g, "");
+  if (!digitsOnly) {
+    return null;
+  }
+
+  return keepPlus ? `+${digitsOnly}` : digitsOnly;
+}
+
 export function MvpBoard() {
   const [displayName, setDisplayName] = useState("");
+  const [creatorPhone, setCreatorPhone] = useState("");
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [groupName, setGroupName] = useState("");
   const [privacy, setPrivacy] = useState<GroupPrivacy>("approval_required");
   const [deadline, setDeadline] = useState("");
@@ -64,9 +81,17 @@ export function MvpBoard() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const configuredBaseUrl = (process.env.NEXT_PUBLIC_APP_BASE_URL || "").trim();
+  const browserOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const configuredIsLocalhost = /localhost|127\.0\.0\.1/i.test(configuredBaseUrl);
+  const runningOutsideLocalhost = browserOrigin
+    ? !/localhost|127\.0\.0\.1/i.test(browserOrigin)
+    : false;
+
   const baseUrl =
-    (process.env.NEXT_PUBLIC_APP_BASE_URL || "").trim() ||
-    (typeof window !== "undefined" ? window.location.origin : "");
+    configuredBaseUrl && !(configuredIsLocalhost && runningOutsideLocalhost)
+      ? configuredBaseUrl
+      : browserOrigin;
 
   const inviteLink = useMemo(() => {
     if (!selectedGroup || !baseUrl) {
@@ -198,6 +223,8 @@ export function MvpBoard() {
       const profilePayload = {
         id: userId,
         display_name: buildDisplayName(displayName, userId),
+        phone: normalizePhone(creatorPhone),
+        notification_enabled: notificationsEnabled,
       };
 
       const { error: profileError } = await supabase
@@ -308,6 +335,26 @@ export function MvpBoard() {
                 placeholder="Example: David"
                 className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-emerald-500 transition focus:ring"
               />
+            </label>
+
+            <label className="block text-sm font-medium text-slate-700">
+              Your WhatsApp number (recommended)
+              <input
+                value={creatorPhone}
+                onChange={(event) => setCreatorPhone(event.target.value)}
+                placeholder="Example: +573001112233"
+                className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-emerald-500 transition focus:ring"
+              />
+            </label>
+
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <input
+                type="checkbox"
+                checked={notificationsEnabled}
+                onChange={(event) => setNotificationsEnabled(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              Receive WhatsApp notifications for approvals and reminders
             </label>
 
             <label className="block text-sm font-medium text-slate-700">
