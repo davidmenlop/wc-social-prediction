@@ -15,6 +15,14 @@ export type ApiFootballFixture = {
     home: number | null;
     away: number | null;
   };
+  teams: {
+    home: {
+      name: string;
+    };
+    away: {
+      name: string;
+    };
+  };
 };
 
 type ApiFootballResponse = {

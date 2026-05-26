@@ -76,14 +76,13 @@ export async function notifyJoinRequestAdmins(
   const recipients = await loadGroupAdminProfiles(group);
   const uniqueRecipients = uniqueProfilesById(recipients);
 
-  const decisionLinks = buildJoinDecisionLinks(request.id, request.admin_action_token);
+  const reviewLink = buildJoinReviewLink(request.id, request.admin_action_token);
 
   const body = buildJoinRequestMessage({
     groupName: group.name,
     requestedName,
     requestedPhone,
-    approveLink: decisionLinks?.approve,
-    rejectLink: decisionLinks?.reject,
+    reviewLink: reviewLink ?? undefined,
   });
 
   for (const recipient of uniqueRecipients) {
@@ -137,6 +136,7 @@ export async function notifyJoinDecisionUser(
   const body = buildJoinDecisionMessage({
     groupName: group.name,
     status: request.status,
+    nextStepLink: buildApprovedNextStepLink(group.id, request.status),
   });
 
   const sendResult = await sendWhatsAppMessage(requester.phone, body);
@@ -277,20 +277,34 @@ async function loadJoinRequest(requestId: string): Promise<JoinRequestRow> {
   return data as JoinRequestRow;
 }
 
-function buildJoinDecisionLinks(
+function buildJoinReviewLink(
   requestId: string,
   adminActionToken: string
-): { approve: string; reject: string } | null {
+): string | null {
   const configuredBaseUrl = (getOptionalServerEnv("NEXT_PUBLIC_APP_BASE_URL") || "").trim();
   if (!configuredBaseUrl) {
     return null;
   }
 
   const base = configuredBaseUrl.replace(/\/$/, "");
-  const approve = `${base}/api/public/join-requests/${requestId}/decision?action=approved&token=${adminActionToken}`;
-  const reject = `${base}/api/public/join-requests/${requestId}/decision?action=rejected&token=${adminActionToken}`;
+  return `${base}/join-requests/${requestId}/review?t=${adminActionToken}`;
+}
 
-  return { approve, reject };
+function buildApprovedNextStepLink(
+  groupId: string,
+  status: "approved" | "rejected"
+): string | undefined {
+  if (status !== "approved") {
+    return undefined;
+  }
+
+  const configuredBaseUrl = (getOptionalServerEnv("NEXT_PUBLIC_APP_BASE_URL") || "").trim();
+  if (!configuredBaseUrl) {
+    return undefined;
+  }
+
+  const base = configuredBaseUrl.replace(/\/$/, "");
+  return `${base}/groups/${groupId}/predictions`;
 }
 
 async function loadGroup(groupId: string): Promise<GroupRow> {

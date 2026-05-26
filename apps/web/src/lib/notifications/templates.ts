@@ -12,13 +12,13 @@ type JoinRequestMessageParams = {
   groupName: string;
   requestedName: string;
   requestedPhone: string;
-  approveLink?: string;
-  rejectLink?: string;
+  reviewLink?: string;
 };
 
 type JoinDecisionMessageParams = {
   groupName: string;
   status: "approved" | "rejected";
+  nextStepLink?: string;
 };
 
 type PredictionReminderMessageParams = {
@@ -37,21 +37,38 @@ export function buildWinnerMessage(params: WinnerMessageParams): string {
 }
 
 export function buildJoinRequestMessage(params: JoinRequestMessageParams): string {
-  const linksSection =
-    params.approveLink && params.rejectLink
-      ? ` Aprobar: ${params.approveLink} Rechazar: ${params.rejectLink}`
-      : " Entra al panel de admin para aprobar o rechazar.";
+  if (params.reviewLink) {
+    return [
+      "Nueva solicitud de ingreso",
+      `Grupo: ${params.groupName}`,
+      `Nombre: ${params.requestedName}`,
+      `Telefono: ${params.requestedPhone}`,
+      "",
+      "Revisar solicitud:",
+      params.reviewLink,
+    ].join("\n");
+  }
 
   return [
-    `Nueva solicitud para tu grupo ${params.groupName}.`,
-    `Nombre: ${params.requestedName}.`,
-    `Telefono: ${params.requestedPhone}.`,
-    linksSection,
-  ].join(" ");
+    "Nueva solicitud de ingreso",
+    `Grupo: ${params.groupName}`,
+    `Nombre: ${params.requestedName}`,
+    `Telefono: ${params.requestedPhone}`,
+    "",
+    "Entra al panel de admin para aprobar o rechazar.",
+  ].join("\n");
 }
 
 export function buildJoinDecisionMessage(params: JoinDecisionMessageParams): string {
   if (params.status === "approved") {
+    if (params.nextStepLink) {
+      return [
+        `Tu solicitud para ${params.groupName} fue aprobada.`,
+        "Ya puedes ver los partidos y cargar tu pronostico.",
+        `Entrar ahora: ${params.nextStepLink}`,
+      ].join(" ");
+    }
+
     return `Tu solicitud para ${params.groupName} fue aprobada. Ya puedes entrar y hacer tus pronosticos.`;
   }
 
