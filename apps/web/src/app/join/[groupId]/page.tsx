@@ -1,6 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type GroupInfo = {
@@ -25,6 +26,7 @@ export default function JoinGroupPage({
 }: {
   params: Promise<{ groupId: string }>;
 }) {
+  const router = useRouter();
   const [groupId, setGroupId] = useState("");
   const [group, setGroup] = useState<GroupInfo | null>(null);
   const [requestedName, setRequestedName] = useState("");
@@ -80,7 +82,7 @@ export default function JoinGroupPage({
 
       setGroup(payload.group);
       setStatus("idle");
-      setMessage("Ready to join this group.");
+      setMessage("Lista para unirte.");
     }
 
     init();
@@ -97,17 +99,17 @@ export default function JoinGroupPage({
 
     if (group.privacy === "approval_required" && !requestedPhone.trim()) {
       setStatus("error");
-      setMessage("WhatsApp is required for private groups. Use format like +573001112233.");
+      setMessage("Tu numero de WhatsApp es obligatorio para grupos privados. Usa el formato +573001112233.");
       return;
     }
 
     setStatus("loading");
-    setMessage("Preparing your access...");
+    setMessage("Procesando...");
 
     const accessToken = await ensureSessionAndGetAccessToken();
     if (!accessToken) {
       setStatus("error");
-      setMessage("Could not start your guest session.");
+      setMessage("No pudimos iniciar tu sesion de invitado.");
       return;
     }
 
@@ -132,86 +134,95 @@ export default function JoinGroupPage({
 
     if (response.status === 409 || payload.code === "registration_closed") {
       setStatus("closed");
-      setMessage("This group is closed for new members.");
+      setMessage("Este grupo esta cerrado para nuevos miembros.");
       return;
     }
 
     if (!response.ok || !payload.status) {
       setStatus("error");
-      setMessage(payload.error || "Could not process your request.");
+      setMessage(payload.error || "No pudimos procesar tu solicitud.");
       return;
     }
 
     setStatus(payload.status);
 
     if (payload.status === "joined" || payload.status === "already_member") {
-      setMessage("You are now part of this group.");
+      router.push(`/groups/${groupId}/predictions`);
       return;
     }
 
     if (payload.status === "pending" || payload.status === "already_pending") {
-      setMessage("Your join request is pending admin approval.");
+      setMessage("Tu solicitud esta pendiente de aprobacion por el admin.");
       return;
     }
 
-    setMessage("Action completed.");
+    setMessage("Accion completada.");
   }
 
   return (
     <main className="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-2xl items-center px-4 py-6 sm:px-6">
       <section className="w-full rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
-          Invitation
+          Invitacion
         </p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-          {group ? group.name : "Join group"}
+          {group ? group.name : "Unirse al grupo"}
         </h1>
         <p className="mt-2 text-sm text-slate-600">{deadlineLabel}</p>
 
         {group && (
           <p className="mt-2 text-xs text-slate-500">
-            Type: {group.privacy === "open" ? "Open group" : "Private with approval"}
+            Tipo: {group.privacy === "open" ? "Grupo abierto" : "Privado con aprobacion"}
           </p>
         )}
 
         <div className="mt-5 space-y-3">
           <label className="block text-sm font-medium text-slate-700">
-            Your name
+            Tu nombre
             <input
               value={requestedName}
               onChange={(event) => setRequestedName(event.target.value)}
-              placeholder="Example: Laura"
+              placeholder="Ejemplo: Laura"
               className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-emerald-500 transition focus:ring"
             />
           </label>
 
           <label className="block text-sm font-medium text-slate-700">
-            Your WhatsApp number
+            Tu numero de WhatsApp
+            {isApprovalRequired && (
+              <span className="ml-1 text-rose-500">*</span>
+            )}
             <input
+              type="tel"
+              required={isApprovalRequired}
               value={requestedPhone}
               onChange={(event) => setRequestedPhone(event.target.value)}
-              placeholder="Example: +573001112233"
-              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none ring-emerald-500 transition focus:ring"
+              placeholder="Ejemplo: +573001112233"
+              className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none ring-emerald-500 transition focus:ring ${
+                isApprovalRequired && !requestedPhone.trim()
+                  ? "border-rose-300 bg-rose-50"
+                  : "border-slate-300"
+              }`}
             />
-            {isApprovalRequired && (
-              <span className="mt-1 block text-xs text-slate-500">
-                Required for approval notifications.
-              </span>
-            )}
+            <span className="mt-1 block text-xs text-slate-500">
+              {isApprovalRequired
+                ? "Obligatorio. Se usara para notificarte cuando el admin apruebe tu solicitud."
+                : "Opcional. Para recibir recordatorios y resultados."}
+            </span>
           </label>
         </div>
 
         <button
           type="button"
           onClick={handleJoin}
-          disabled={!group || status === "loading" || status === "closed"}
+          disabled={!group || status === "loading" || status === "closed" || (isApprovalRequired && !requestedPhone.trim())}
           className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
         >
           {status === "loading"
-            ? "Processing..."
+            ? "Procesando..."
             : isApprovalRequired
-            ? "Request access"
-            : "Join now"}
+            ? "Solicitar acceso"
+            : "Unirme ahora"}
         </button>
 
         <p
