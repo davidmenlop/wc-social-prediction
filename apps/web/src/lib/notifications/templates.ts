@@ -12,6 +12,8 @@ type JoinRequestMessageParams = {
   groupName: string;
   requestedName: string;
   requestedPhone: string;
+  approveLink?: string;
+  rejectLink?: string;
 };
 
 type JoinDecisionMessageParams = {
@@ -35,11 +37,16 @@ export function buildWinnerMessage(params: WinnerMessageParams): string {
 }
 
 export function buildJoinRequestMessage(params: JoinRequestMessageParams): string {
+  const linksSection =
+    params.approveLink && params.rejectLink
+      ? ` Aprobar: ${params.approveLink} Rechazar: ${params.rejectLink}`
+      : " Entra al panel de admin para aprobar o rechazar.";
+
   return [
     `Nueva solicitud para tu grupo ${params.groupName}.`,
     `Nombre: ${params.requestedName}.`,
     `Telefono: ${params.requestedPhone}.`,
-    "Entra al panel de admin para aprobar o rechazar.",
+    linksSection,
   ].join(" ");
 }
 

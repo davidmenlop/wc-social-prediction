@@ -7,6 +7,7 @@ import {
 } from "@/lib/notifications/templates";
 import { sendWhatsAppMessage } from "@/lib/notifications/whatsapp";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getOptionalServerEnv } from "@/lib/env.server";
 
 type EventNotificationResult = {
   sentMessages: number;
@@ -21,6 +22,7 @@ type JoinRequestRow = {
   status: "pending" | "approved" | "rejected";
   requested_name: string | null;
   requested_phone: string | null;
+  admin_action_token: string;
 };
 
 type GroupRow = {
@@ -74,10 +76,14 @@ export async function notifyJoinRequestAdmins(
   const recipients = await loadGroupAdminProfiles(group);
   const uniqueRecipients = uniqueProfilesById(recipients);
 
+  const decisionLinks = buildJoinDecisionLinks(request.id, request.admin_action_token);
+
   const body = buildJoinRequestMessage({
     groupName: group.name,
     requestedName,
     requestedPhone,
+    approveLink: decisionLinks?.approve,
+    rejectLink: decisionLinks?.reject,
   });
 
   for (const recipient of uniqueRecipients) {
@@ -257,7 +263,7 @@ async function loadJoinRequest(requestId: string): Promise<JoinRequestRow> {
   const { data, error } = await supabaseAdmin
     .from("join_requests")
     .select(
-      "id, group_id, requested_by, status, requested_name, requested_phone"
+      "id, group_id, requested_by, status, requested_name, requested_phone, admin_action_token"
     )
     .eq("id", requestId)
     .single();
@@ -269,6 +275,22 @@ async function loadJoinRequest(requestId: string): Promise<JoinRequestRow> {
   }
 
   return data as JoinRequestRow;
+}
+
+function buildJoinDecisionLinks(
+  requestId: string,
+  adminActionToken: string
+): { approve: string; reject: string } | null {
+  const configuredBaseUrl = (getOptionalServerEnv("NEXT_PUBLIC_APP_BASE_URL") || "").trim();
+  if (!configuredBaseUrl) {
+    return null;
+  }
+
+  const base = configuredBaseUrl.replace(/\/$/, "");
+  const approve = `${base}/api/public/join-requests/${requestId}/decision?action=approved&token=${adminActionToken}`;
+  const reject = `${base}/api/public/join-requests/${requestId}/decision?action=rejected&token=${adminActionToken}`;
+
+  return { approve, reject };
 }
 
 async function loadGroup(groupId: string): Promise<GroupRow> {

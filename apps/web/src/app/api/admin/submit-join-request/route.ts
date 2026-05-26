@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { isInternalTokenValid } from "@/lib/auth/internal-token";
 import { notifyJoinRequestAdmins } from "@/lib/notifications/events";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
       status: "pending",
       requested_name: body.requestedName?.trim() || null,
       requested_phone: body.requestedPhone?.trim() || null,
+      admin_action_token: randomUUID(),
     };
 
     const { data: created, error: createError } = await supabaseAdmin
