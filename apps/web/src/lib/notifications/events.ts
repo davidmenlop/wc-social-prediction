@@ -118,7 +118,6 @@ export async function notifyJoinDecisionUser(
 
   const request = await loadJoinRequest(requestId);
   const group = await loadGroup(request.group_id);
-  const requester = await loadProfileOptional(request.requested_by);
 
   if (request.status !== "approved" && request.status !== "rejected") {
     result.skippedMessages += 1;
@@ -128,25 +127,11 @@ export async function notifyJoinDecisionUser(
     return result;
   }
 
-  const candidatePhones = uniquePhones([
-    request.requested_phone,
-    requester?.phone ?? null,
-  ]);
-
-  if (candidatePhones.length === 0) {
+  const requestedPhone = request.requested_phone?.trim() || null;
+  if (!requestedPhone) {
     result.skippedMessages += 1;
     result.errors.push(
-      `Join request ${request.id}: no phone available for requester ${request.requested_by}`
-    );
-    return result;
-  }
-
-  // For transactional decisions (approved/rejected), always attempt delivery if a phone exists.
-  // requested_phone is prioritized because it is the number captured at request time.
-  if (requester && !requester.notification_enabled && !request.requested_phone) {
-    result.skippedMessages += 1;
-    result.errors.push(
-      `Join request ${request.id}: user notifications disabled and no requested_phone fallback`
+      `Join request ${request.id}: requested_phone is missing, cannot notify user ${request.requested_by}`
     );
     return result;
   }
@@ -157,21 +142,18 @@ export async function notifyJoinDecisionUser(
     nextStepLink: buildApprovedNextStepLink(group.id, request.status),
   });
 
-  for (const phone of candidatePhones) {
-    const sendResult = await sendWhatsAppMessage(phone, body);
-    if (sendResult.sent) {
-      result.sentMessages += 1;
-      return result;
-    }
-
-    result.errors.push(
-      `Join request ${request.id}, user ${request.requested_by}, phone ${phone}: ${
-        sendResult.error ?? "send failed"
-      }`
-    );
+  const sendResult = await sendWhatsAppMessage(requestedPhone, body);
+  if (sendResult.sent) {
+    result.sentMessages += 1;
+    return result;
   }
 
   result.skippedMessages += 1;
+  result.errors.push(
+    `Join request ${request.id}, user ${request.requested_by}, phone ${requestedPhone}: ${
+      sendResult.error ?? "send failed"
+    }`
+  );
 
   return result;
 }
@@ -361,20 +343,6 @@ async function loadProfile(profileId: string): Promise<ProfileRow> {
   return data as ProfileRow;
 }
 
-async function loadProfileOptional(profileId: string): Promise<ProfileRow | null> {
-  const { data, error } = await supabaseAdmin
-    .from("profiles")
-    .select("id, display_name, phone, notification_enabled")
-    .eq("id", profileId)
-    .maybeSingle();
-
-  if (error) {
-    return null;
-  }
-
-  return (data as ProfileRow | null) ?? null;
-}
-
 async function loadGroupAdminProfiles(group: GroupRow): Promise<ProfileRow[]> {
   const { data: members, error } = await supabaseAdmin
     .from("group_members")
@@ -419,19 +387,3 @@ function uniqueProfilesById(profiles: ProfileRow[]): ProfileRow[] {
   return Array.from(map.values());
 }
 
-function uniquePhones(values: Array<string | null | undefined>): string[] {
-  const seen = new Set<string>();
-  const phones: string[] = [];
-
-  for (const value of values) {
-    const phone = value?.trim();
-    if (!phone || seen.has(phone)) {
-      continue;
-    }
-
-    seen.add(phone);
-    phones.push(phone);
-  }
-
-  return phones;
-}
